@@ -15,7 +15,9 @@ import {
   Briefcase,
   Layers,
   CalendarCheck,
-  Lock
+  Lock,
+  Share2,
+  Link
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ScandinavianHeader from './components/ScandinavianHeader';
@@ -24,6 +26,20 @@ import EmployeeAuth from './components/EmployeeAuth';
 import AdminDashboard from './components/AdminDashboard';
 import { Employee, AttendancePair, AttendanceStatus } from './types';
 import { INITIAL_EMPLOYEES, INITIAL_ATTENDANCE } from './data';
+
+// Firebase imports
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  onSnapshot, 
+  getDocFromServer,
+  updateDoc,
+  deleteDoc
+} from 'firebase/firestore';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { db, auth, handleFirestoreError, OperationType } from './firebase';
 
 // Simulation Date: Senin, 13 Juli 2026 (based on meta-context)
 const TODAY_DATE = "2026-07-13";
@@ -37,28 +53,43 @@ const timeToMinutes = (timeStr: string) => {
 
 export default function App() {
   // 1. Core Persistent State
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    const saved = localStorage.getItem('diarsiteki_employees_v2');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return INITIAL_EMPLOYEES;
-  });
-
-  const [attendance, setAttendance] = useState<AttendancePair[]>(() => {
-    const saved = localStorage.getItem('diarsiteki_attendance_v2');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return INITIAL_ATTENDANCE;
-  });
-
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [attendance, setAttendance] = useState<AttendancePair[]>([]);
   const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(() => {
     return localStorage.getItem('diarsiteki_current_emp_v2');
   });
 
   // 2. UI Control States
   const [activeTab, setActiveTab] = useState<'karyawan' | 'admin'>('karyawan');
+  
+  // Special Employee Portal Link states
+  const [isEmployeePortal, setIsEmployeePortal] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('role') === 'karyawan' || 
+           params.get('mode') === 'karyawan' || 
+           window.location.hash.includes('karyawan');
+  });
+  const [isLinkCopied, setIsLinkCopied] = useState(false);
+
+  const handleCopyEmployeeLink = () => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const employeePortalUrl = `${baseUrl}?role=karyawan`;
+    navigator.clipboard.writeText(employeePortalUrl)
+      .then(() => {
+        setIsLinkCopied(true);
+        setTimeout(() => setIsLinkCopied(false), 2000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy link: ', err);
+      });
+  };
+
+  // If employee portal link is accessed, lock mode to karyawan
+  useEffect(() => {
+    if (isEmployeePortal) {
+      setActiveTab('karyawan');
+    }
+  }, [isEmployeePortal]);
   const [selectedDate, setSelectedDate] = useState<string>(TODAY_DATE); // for calendar filter
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [activeStatus, setActiveStatus] = useState<'Masuk' | 'Pulang'>('Masuk');
@@ -71,6 +102,11 @@ export default function App() {
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
 
+  // Firebase Auth State
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Handle Admin Password Login
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (adminPasswordInput === 'admin123') {
@@ -88,15 +124,118 @@ export default function App() {
     localStorage.removeItem('diarsiteki_admin_auth_v2');
   };
 
-  // Sync to local storage
-  useEffect(() => {
-    localStorage.setItem('diarsiteki_employees_v2', JSON.stringify(employees));
-  }, [employees]);
+  const handleGoogleSignIn = async () => {
+    try {
+      const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      if (result.user && result.user.email === 'timperencanaanrenovki@gmail.com') {
+        setIsAdminAuthenticated(true);
+        localStorage.setItem('diarsiteki_admin_auth_v2', 'true');
+        setAdminAuthError(null);
+      } else {
+        setAdminAuthError('Akses Ditolak: Hanya email admin yang diperbolehkan.');
+      }
+    } catch (e) {
+      console.error(e);
+      setAdminAuthError('Gagal masuk menggunakan Google.');
+    }
+  };
 
+  // Setup Firebase Auth session (Anonymous by default, or Google Auth for Admin)
   useEffect(() => {
-    localStorage.setItem('diarsiteki_attendance_v2', JSON.stringify(attendance));
-  }, [attendance]);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        setAuthLoading(false);
+      } else {
+        try {
+          await signInAnonymously(auth);
+        } catch (e) {
+          console.error("Anonymous authentication failed:", e);
+          setAuthLoading(false);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
+  // Liveness check for Firebase connection
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    }
+    testConnection();
+  }, []);
+
+  // Sync Employees from Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, 'employees'),
+      (snapshot) => {
+        const list: Employee[] = [];
+        snapshot.forEach((doc) => {
+          list.push(doc.data() as Employee);
+        });
+        
+        if (list.length === 0) {
+          // Seed initial employees
+          INITIAL_EMPLOYEES.forEach(async (emp) => {
+            try {
+              await setDoc(doc(db, 'employees', emp.id), emp);
+            } catch (e) {
+              console.error("Error seeding employee:", e);
+            }
+          });
+        } else {
+          setEmployees(list);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'employees');
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Sync Attendance from Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, 'attendance'),
+      (snapshot) => {
+        const list: AttendancePair[] = [];
+        snapshot.forEach((doc) => {
+          list.push(doc.data() as AttendancePair);
+        });
+
+        if (list.length === 0) {
+          // Seed initial attendance
+          INITIAL_ATTENDANCE.forEach(async (att) => {
+            try {
+              await setDoc(doc(db, 'attendance', att.id), att);
+            } catch (e) {
+              console.error("Error seeding attendance:", e);
+            }
+          });
+        } else {
+          list.sort((a, b) => b.date.localeCompare(a.date));
+          setAttendance(list);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'attendance');
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Sync current employee selection to local storage
   useEffect(() => {
     if (currentEmployeeId) {
       localStorage.setItem('diarsiteki_current_emp_v2', currentEmployeeId);
@@ -104,6 +243,14 @@ export default function App() {
       localStorage.removeItem('diarsiteki_current_emp_v2');
     }
   }, [currentEmployeeId]);
+
+  // Handle Google Admin state sync
+  useEffect(() => {
+    if (currentUser?.email === "timperencanaanrenovki@gmail.com") {
+      setIsAdminAuthenticated(true);
+      localStorage.setItem('diarsiteki_admin_auth_v2', 'true');
+    }
+  }, [currentUser]);
 
   // Find active employee info
   const activeEmployee = employees.find(e => e.id === currentEmployeeId);
@@ -125,11 +272,15 @@ export default function App() {
   };
 
   // Handle new employee registration
-  const handleCreateEmployee = (newEmp: Omit<Employee, 'id'>) => {
+  const handleCreateEmployee = async (newEmp: Omit<Employee, 'id'>) => {
     const newId = `emp_${Date.now()}`;
     const created: Employee = { id: newId, ...newEmp };
-    setEmployees(prev => [created, ...prev]);
-    setCurrentEmployeeId(newId);
+    try {
+      await setDoc(doc(db, 'employees', newId), created);
+      setCurrentEmployeeId(newId);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `employees/${newId}`);
+    }
   };
 
   // Open camera overlay
@@ -139,7 +290,7 @@ export default function App() {
   };
 
   // Save watermarked record
-  const handleSaveAttendance = (
+  const handleSaveAttendance = async (
     photoUrl: string, 
     location: { latitude: number; longitude: number } | null, 
     notes: string
@@ -158,11 +309,6 @@ export default function App() {
       }
     }
 
-    const updatedAttendance = [...attendance];
-    const existingIndex = updatedAttendance.findIndex(
-      p => p.employeeId === currentEmployeeId && p.date === TODAY_DATE
-    );
-
     const detail = {
       timestamp: timestampStr,
       photoUrl,
@@ -170,49 +316,60 @@ export default function App() {
       notes: notes.trim() || undefined
     };
 
-    if (existingIndex > -1) {
-      const pair = { ...updatedAttendance[existingIndex] };
-      if (activeStatus === 'Masuk') {
-        pair.masuk = detail;
-        pair.status = finalStatus;
-      } else {
-        pair.pulang = detail;
-        if (pair.masuk) {
-          const mMin = timeToMinutes(pair.masuk.timestamp);
-          const pMin = timeToMinutes(timestampStr);
-          pair.workDurationMinutes = pMin - mMin;
+    const docId = `pair_${currentEmployeeId}_${TODAY_DATE}`;
+    const docRef = doc(db, 'attendance', docId);
+
+    try {
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const existingPair = docSnap.data() as AttendancePair;
+        const pair = { ...existingPair };
+        if (activeStatus === 'Masuk') {
+          pair.masuk = detail;
+          pair.status = finalStatus;
+        } else {
+          pair.pulang = detail;
+          if (pair.masuk) {
+            const mMin = timeToMinutes(pair.masuk.timestamp);
+            const pMin = timeToMinutes(timestampStr);
+            pair.workDurationMinutes = pMin - mMin;
+          }
         }
-      }
-      updatedAttendance[existingIndex] = pair;
-    } else {
-      const newPair: AttendancePair = {
-        id: `pair_${currentEmployeeId}_${TODAY_DATE}`,
-        employeeId: currentEmployeeId,
-        date: TODAY_DATE,
-        dateLabel: TODAY_LABEL,
-        status: finalStatus,
-        masuk: activeStatus === 'Masuk' ? detail : null,
-        pulang: activeStatus === 'Pulang' ? detail : null,
-      };
+        await setDoc(docRef, pair);
+      } else {
+        const newPair: AttendancePair = {
+          id: docId,
+          employeeId: currentEmployeeId,
+          date: TODAY_DATE,
+          dateLabel: TODAY_LABEL,
+          status: finalStatus,
+          masuk: activeStatus === 'Masuk' ? detail : null,
+          pulang: activeStatus === 'Pulang' ? detail : null,
+        };
 
-      if (activeStatus === 'Pulang' && newPair.pulang && newPair.masuk) {
-        const mMin = timeToMinutes(newPair.masuk.timestamp);
-        const pMin = timeToMinutes(newPair.pulang.timestamp);
-        newPair.workDurationMinutes = pMin - mMin;
-      }
+        if (activeStatus === 'Pulang' && newPair.pulang && newPair.masuk) {
+          const mMin = timeToMinutes(newPair.masuk.timestamp);
+          const pMin = timeToMinutes(newPair.pulang.timestamp);
+          newPair.workDurationMinutes = pMin - mMin;
+        }
 
-      updatedAttendance.unshift(newPair);
+        await setDoc(docRef, newPair);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `attendance/${docId}`);
     }
-
-    setAttendance(updatedAttendance);
   };
 
   // Manual actions for admin
-  const handleUpdatePairStatus = (pairId: string, status: AttendanceStatus) => {
-    setAttendance(prev => prev.map(p => p.id === pairId ? { ...p, status } : p));
+  const handleUpdatePairStatus = async (pairId: string, status: AttendanceStatus) => {
+    try {
+      await updateDoc(doc(db, 'attendance', pairId), { status });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `attendance/${pairId}`);
+    }
   };
 
-  const handleAddSpecialStatus = (
+  const handleAddSpecialStatus = async (
     employeeId: string, 
     date: string, 
     status: 'Sakit' | 'Izin' | 'Cuti', 
@@ -227,26 +384,32 @@ export default function App() {
     ];
     const dateLabel = `${days[dateObj.getDay()]}, ${dateObj.getDate()} ${months[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
 
+    const docId = `pair_${employeeId}_${date}`;
     const newPair: AttendancePair = {
-      id: `pair_${employeeId}_${date}`,
+      id: docId,
       employeeId,
       date,
       dateLabel,
       status,
       masuk: null,
       pulang: null,
-      workDurationMinutes: undefined
+      workDurationMinutes: undefined,
+      notes: notes || undefined
     };
 
-    // Filter out existing pair of that day for that employee
-    setAttendance(prev => {
-      const filtered = prev.filter(p => !(p.employeeId === employeeId && p.date === date));
-      return [newPair, ...filtered];
-    });
+    try {
+      await setDoc(doc(db, 'attendance', docId), newPair);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `attendance/${docId}`);
+    }
   };
 
-  const handleDeletePair = (pairId: string) => {
-    setAttendance(prev => prev.filter(p => p.id !== pairId));
+  const handleDeletePair = async (pairId: string) => {
+    try {
+      await deleteDoc(doc(db, 'attendance', pairId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `pairId`);
+    }
   };
 
   // Personal history logs for active employee
@@ -276,46 +439,82 @@ export default function App() {
           <ScandinavianHeader />
 
           {/* Double Tabs Navigation (Role Selector) */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#D4C9B8]/60 pb-4">
-            <div className="flex bg-[#F0EEE9] p-1 rounded-xl gap-1">
-              <button
-                onClick={() => setActiveTab('karyawan')}
-                className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-2 ${
-                  activeTab === 'karyawan' 
-                    ? 'bg-[#5A5A40] text-white shadow-xs' 
-                    : 'text-[#8C7E6C] hover:text-[#5A5A40]'
-                }`}
-              >
-                <User className="w-3.5 h-3.5" />
-                Mode Karyawan
-              </button>
-              <button
-                onClick={() => setActiveTab('admin')}
-                className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-2 ${
-                  activeTab === 'admin' 
-                    ? 'bg-[#5A5A40] text-white shadow-xs' 
-                    : 'text-[#8C7E6C] hover:text-[#5A5A40]'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                Panel Admin
-              </button>
-            </div>
+          {isEmployeePortal ? (
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#D4C9B8]/60 pb-4">
+              <div className="flex items-center gap-2.5 bg-[#5A5A40] text-white px-4 py-2.5 rounded-xl border border-[#D4C9B8]/20 shadow-xs">
+                <User className="w-4 h-4 text-[#D4C9B8]" />
+                <span className="text-xs uppercase tracking-widest font-extrabold">
+                  Portal Resmi Karyawan Diarsiteki
+                </span>
+              </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] uppercase font-bold text-[#8C7E6C] tracking-widest bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse inline-block" />
-                Satelit GPS Aktif
-              </span>
-              <button
-                onClick={handleExportData}
-                className="text-[10px] text-[#8C7E6C] hover:text-[#5A5A40] flex items-center gap-1.5 bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg transition-colors font-bold uppercase tracking-wider"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Backup Data
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase font-bold text-[#8C7E6C] tracking-widest bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse inline-block" />
+                  Satelit GPS Aktif
+                </span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#D4C9B8]/60 pb-4">
+              <div className="flex bg-[#F0EEE9] p-1 rounded-xl gap-1">
+                <button
+                  onClick={() => setActiveTab('karyawan')}
+                  className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-2 ${
+                    activeTab === 'karyawan' 
+                      ? 'bg-[#5A5A40] text-white shadow-xs' 
+                      : 'text-[#8C7E6C] hover:text-[#5A5A40]'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  Mode Karyawan
+                </button>
+                <button
+                  onClick={() => setActiveTab('admin')}
+                  className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-2 ${
+                    activeTab === 'admin' 
+                      ? 'bg-[#5A5A40] text-white shadow-xs' 
+                      : 'text-[#8C7E6C] hover:text-[#5A5A40]'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  Panel Admin
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase font-bold text-[#8C7E6C] tracking-widest bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse inline-block" />
+                  Satelit GPS Aktif
+                </span>
+                
+                <button
+                  onClick={handleCopyEmployeeLink}
+                  className="text-[10px] text-[#5A5A40] hover:bg-[#F5F2EB] flex items-center gap-1.5 bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg transition-all font-bold uppercase tracking-wider shadow-xs cursor-pointer"
+                >
+                  {isLinkCopied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600 animate-bounce" />
+                      <span>Link Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>Salin Link Karyawan</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleExportData}
+                  className="text-[10px] text-[#8C7E6C] hover:text-[#5A5A40] flex items-center gap-1.5 bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg transition-colors font-bold uppercase tracking-wider"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Backup Data
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Content Body based on tab */}
@@ -374,6 +573,23 @@ export default function App() {
                     Masuk ke Panel Admin
                   </button>
                 </form>
+
+                <div className="flex items-center gap-3 my-2">
+                  <div className="h-[1px] bg-[#D4C9B8] flex-1" />
+                  <span className="text-[10px] uppercase tracking-wider text-[#8C7E6C] font-semibold">atau</span>
+                  <div className="h-[1px] bg-[#D4C9B8] flex-1" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  className="w-full py-3 bg-white border border-[#D4C9B8] text-[#5A5A40] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#F5F2EB] shadow-xs transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.275 1.565-1.88 4.604-6.887 4.604-4.33 0-7.859-3.578-7.859-8s3.53-8 7.859-8c2.46 0 4.105 1.025 5.047 1.926l3.227-3.11C18.28 1.845 15.46 1 12.24 1 5.48 1 0 6.48 0 13s5.48 12 12.24 12c7.05 0 11.75-4.97 11.75-11.96 0-.81-.087-1.425-.195-1.755H12.24z"/>
+                  </svg>
+                  Masuk dengan Google
+                </button>
 
                 <div className="p-3 bg-[#FCFAF7] border border-dashed border-[#D4C9B8] rounded-xl text-center">
                   <p className="text-[10px] text-[#8C7E6C] font-semibold uppercase tracking-wider mb-0.5">
@@ -673,6 +889,23 @@ export default function App() {
         {/* Foot Elements */}
         <footer className="pt-6 border-t border-[#D4C9B8]/80 flex flex-col sm:flex-row justify-between items-center gap-3 text-[10px] text-[#8C7E6C] font-semibold uppercase tracking-[0.2em] w-full">
           <div>DIARSITEKI ABSENSI PROYEK</div>
+          
+          {isEmployeePortal && (
+            <button
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('role');
+                url.searchParams.delete('mode');
+                url.hash = '';
+                window.history.replaceState({}, '', url.toString());
+                setIsEmployeePortal(false);
+              }}
+              className="hover:text-[#5A5A40] underline lowercase tracking-normal cursor-pointer normal-case"
+            >
+              buka mode penuh (admin/karyawan)
+            </button>
+          )}
+
           <div className="font-mono text-[9px] tracking-normal">Built with React + Vite • July 2026 Sandbox</div>
         </footer>
       </div>

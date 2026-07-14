@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "Employee": {
+      "title": "Employee",
+      "description": "Employee profile details",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique employee identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the employee"
+        },
+        "jabatan": {
+          "type": "string",
+          "description": "Job role or title of the employee"
+        },
+        "posisi": {
+          "type": "string",
+          "enum": ["Kantor", "Lapangan"],
+          "description": "Work placement location type"
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "Base64 encoded string or URL of the employee's profile photo"
+        }
+      },
+      "required": ["id", "name", "jabatan", "posisi"]
+    },
+    "AttendancePair": {
+      "title": "AttendancePair",
+      "description": "Detailed attendance pair record for a specific day and employee",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique key matching employee ID and date"
+        },
+        "employeeId": {
+          "type": "string",
+          "description": "Referenced employee identifier"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date format YYYY-MM-DD"
+        },
+        "dateLabel": {
+          "type": "string",
+          "description": "Human-readable Indonesian formatted date"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Hadir", "Telat", "Sakit", "Izin", "Cuti"],
+          "description": "Attendance classification"
+        },
+        "masuk": {
+          "type": "object",
+          "description": "Clock-in detail map containing timestamp, photo, location and optional notes"
+        },
+        "pulang": {
+          "type": "object",
+          "description": "Clock-out detail map containing timestamp, photo, location and optional notes"
+        },
+        "workDurationMinutes": {
+          "type": "number",
+          "description": "Calculated total duration of work in minutes"
+        },
+        "notes": {
+          "type": "string",
+          "description": "General or specific attendance override notes"
+        }
+      },
+      "required": ["id", "employeeId", "date", "dateLabel", "status"]
+    }
+  },
+  "firestore": {
+    "employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Storage collection for all active employee records"
+    },
+    "attendance/{attendanceId}": {
+      "schema": "AttendancePair",
+      "description": "Storage collection for daily check-in/out and general attendance logs"
+    }
+  }
+}

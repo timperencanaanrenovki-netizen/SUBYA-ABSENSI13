@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Reusable utility functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == "timperencanaanrenovki@gmail.com"
+      );
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+    
+    // Strict schema validator for Employee
+    function isValidEmployee(data) {
+      return data.keys().hasAll(['id', 'name', 'jabatan', 'posisi']) &&
+             data.keys().size() >= 4 && data.keys().size() <= 5 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 200 &&
+             data.jabatan is string && data.jabatan.size() <= 200 &&
+             data.posisi is string && (data.posisi == 'Kantor' || data.posisi == 'Lapangan') &&
+             (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 1048576));
+    }
+    
+    // Strict schema validator for Attendance record
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['id', 'employeeId', 'date', 'dateLabel', 'status']) &&
+             data.keys().size() >= 5 && data.keys().size() <= 9 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.employeeId is string && data.employeeId.size() <= 128 &&
+             data.date is string && data.date.size() == 10 &&
+             data.dateLabel is string && data.dateLabel.size() <= 100 &&
+             data.status is string && (data.status == 'Hadir' || data.status == 'Telat' || data.status == 'Sakit' || data.status == 'Izin' || data.status == 'Cuti') &&
+             (!('workDurationMinutes' in data) || data.workDurationMinutes is number) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000));
+    }
+
+    // Collection paths mapping
+    match /employees/{employeeId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidEmployee(incoming()) && isValidId(employeeId);
+    }
+    
+    match /attendance/{attendanceId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(attendanceId) && isValidAttendance(incoming()) && (
+        isAdmin() || incoming().employeeId == request.auth.uid
+      );
+      allow update: if isSignedIn() && isValidId(attendanceId) && isValidAttendance(incoming()) && (
+        isAdmin() || (
+          existing().employeeId == request.auth.uid &&
+          incoming().employeeId == request.auth.uid
+        )
+      );
+      allow delete: if isAdmin();
+    }
+    
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Only manageable in the cloud console for extreme security
+    }
+  }
+}
