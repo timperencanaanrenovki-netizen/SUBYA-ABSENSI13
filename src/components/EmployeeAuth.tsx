@@ -10,16 +10,16 @@ interface EmployeeAuthProps {
 }
 
 const PRESET_AVATARS = [
-  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%235A5A40"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>',
-  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%238C7E6C"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>',
-  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23B2BAA0"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>',
-  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23D4C9B8"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>'
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%2311254A"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23346DD3"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%232452A1"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%235587E2"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>'
 ];
 
 export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmployee }: EmployeeAuthProps) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [name, setName] = useState('');
-  const [jabatan, setJabatan] = useState('Arsitek Utama');
+  const [jabatan, setJabatan] = useState('');
   const [posisi, setPosisi] = useState<'Kantor' | 'Lapangan'>('Kantor');
   
   // Profile Photo Source: 'preset' | 'camera'
@@ -46,7 +46,7 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
     setCameraError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 320, facingMode: 'user' },
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
         audio: false
       });
       streamRef.current = stream;
@@ -108,21 +108,22 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
 
     onCreateEmployee({
       name: name.trim(),
-      jabatan,
+      jabatan: jabatan.trim() || 'Karyawan',
       posisi,
       photoUrl: finalPhoto
     });
 
     // Reset Form
     setName('');
+    setJabatan('');
     setCapturedPhotoUrl(null);
     setIsRegistering(false);
   };
 
   return (
-    <div className="bg-white border border-[#D4C9B8] rounded-2xl overflow-hidden shadow-sm flex flex-col md:flex-row max-w-4xl w-full mx-auto">
-      {/* Visual Left Banner (Scandinavian Architecture Style) */}
-      <div className="md:w-5/12 bg-[#5A5A40] p-8 text-white flex flex-col justify-between relative overflow-hidden shrink-0">
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col md:flex-row max-w-4xl w-full mx-auto font-sans">
+      {/* Visual Left Banner (Navy Studio Theme) */}
+      <div className="md:w-5/12 bg-navy-800 p-8 text-white flex flex-col justify-between relative overflow-hidden shrink-0">
         <div className="absolute inset-0 opacity-10 pointer-events-none">
           <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -135,30 +136,30 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
         </div>
 
         <div className="relative z-10 space-y-4">
-          <span className="text-[10px] uppercase font-bold tracking-[0.25em] text-[#D5C7B5]">
+          <span className="text-[10px] uppercase font-bold tracking-[0.25em] text-navy-200">
             Diarsiteki Absensi V2.0
           </span>
           <h2 className="text-2xl font-light tracking-tight leading-tight">
-            Presensi Digital Karyawan <span className="font-semibold text-[#E6D7C3]">Sah & Akurat</span>
+            Presensi Digital Karyawan <span className="font-semibold text-navy-300">Sah & Akurat</span>
           </h2>
-          <p className="text-xs text-[#E8E6DF] leading-relaxed">
+          <p className="text-xs text-navy-100 leading-relaxed opacity-90">
             Sistem validasi mandiri karyawan dengan perekaman koordinat GPS satelit dan enkripsi foto biner real-time.
           </p>
         </div>
 
         <div className="relative z-10 pt-12 md:pt-0 space-y-3">
           <div className="flex items-center gap-3 bg-white/10 px-4 py-3 rounded-xl border border-white/10 text-xs">
-            <Shield className="w-5 h-5 text-[#E6D7C3]" />
+            <Shield className="w-5 h-5 text-navy-300" />
             <div>
               <p className="font-semibold text-white">Keamanan Terjamin</p>
-              <p className="text-[10px] text-[#E8E6DF]">Foto langsung divalidasi dengan tanda air permanen.</p>
+              <p className="text-[10px] text-navy-100 opacity-90">Foto langsung divalidasi dengan tanda air permanen.</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Right Content Area */}
-      <div className="p-8 flex-1 flex flex-col justify-center bg-[#FCFAF7]">
+      <div className="p-8 flex-1 flex flex-col justify-center bg-white">
         {isRegistering ? (
           /* REGISTRATION FORM */
           <motion.div
@@ -167,10 +168,10 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
             className="space-y-6"
           >
             <div>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-[#8C7E6C]">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
                 Pendaftaran Karyawan Baru
               </span>
-              <h3 className="text-xl font-semibold text-[#3A3A35] mt-1">
+              <h3 className="text-xl font-semibold text-slate-800 mt-1">
                 Lengkapi Profil Anda
               </h3>
             </div>
@@ -178,55 +179,51 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
             <form onSubmit={handleRegister} className="space-y-5">
               {/* Name */}
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[#8C7E6C] uppercase tracking-wide">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
                   Nama Lengkap
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3 top-3 w-4 h-4 text-[#8C7E6C]" />
+                  <User className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Contoh: Hendra Kurniawan"
-                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-[#D4C9B8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/30 focus:border-[#5A5A40] text-[#3A3A35] font-sans"
+                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-slate-800 font-sans"
                   />
                 </div>
               </div>
 
-              {/* Jabatan & Posisi Side-by-Side */}
+              {/* Jabatan & Posisi Side-by-Side (Manual Jabatan Input) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#8C7E6C] uppercase tracking-wide">
-                    Jabatan Kerja
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                    Jabatan / Posisi Kerja (Isi Manual)
                   </label>
                   <div className="relative">
-                    <Briefcase className="absolute left-3 top-3 w-4 h-4 text-[#8C7E6C]" />
-                    <select
+                    <Briefcase className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      required
                       value={jabatan}
                       onChange={(e) => setJabatan(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-[#D4C9B8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/30 focus:border-[#5A5A40] text-[#3A3A35] appearance-none"
-                    >
-                      <option value="Principal Architect">Principal Architect</option>
-                      <option value="Site Manager">Site Manager</option>
-                      <option value="Senior Drafter">Senior Drafter</option>
-                      <option value="Pengawas Lapangan">Pengawas Lapangan</option>
-                      <option value="Estimator / RAB">Estimator / RAB</option>
-                      <option value="Staf Administrasi">Staf Administrasi</option>
-                    </select>
+                      placeholder="Contoh: Arsitek Utama"
+                      className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-slate-800 font-sans"
+                    />
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-[#8C7E6C] uppercase tracking-wide">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
                     Lokasi Penugasan
                   </label>
                   <div className="relative">
-                    <MapPin className="absolute left-3 top-3 w-4 h-4 text-[#8C7E6C]" />
+                    <MapPin className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                     <select
                       value={posisi}
                       onChange={(e) => setPosisi(e.target.value as 'Kantor' | 'Lapangan')}
-                      className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-[#D4C9B8] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/30 focus:border-[#5A5A40] text-[#3A3A35] appearance-none"
+                      className="w-full pl-10 pr-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-slate-800 appearance-none font-sans"
                     >
                       <option value="Kantor">Kantor (Studio Diarsiteki)</option>
                       <option value="Lapangan">Lapangan (Proyek Konstruksi)</option>
@@ -237,17 +234,17 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
 
               {/* Photo Selector */}
               <div className="space-y-2">
-                <label className="text-[11px] font-bold text-[#8C7E6C] uppercase tracking-wide block">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block">
                   Foto Profil
                 </label>
                 
                 {/* Method Toggles */}
-                <div className="flex gap-2 p-1 bg-[#F0EEE9] rounded-lg">
+                <div className="flex gap-2 p-1 bg-slate-100 rounded-lg">
                   <button
                     type="button"
                     onClick={() => { setPhotoSource('preset'); stopCamera(); }}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                      photoSource === 'preset' ? 'bg-white text-[#5A5A40] shadow-2xs' : 'text-[#8C7E6C]'
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                      photoSource === 'preset' ? 'bg-white text-navy-800 shadow-2xs' : 'text-slate-500'
                     }`}
                   >
                     Preset Ilustrasi
@@ -255,8 +252,8 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
                   <button
                     type="button"
                     onClick={() => { setPhotoSource('camera'); setIsCameraActive(true); }}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                      photoSource === 'camera' ? 'bg-white text-[#5A5A40] shadow-2xs' : 'text-[#8C7E6C]'
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                      photoSource === 'camera' ? 'bg-white text-navy-800 shadow-2xs' : 'text-slate-500'
                     }`}
                   >
                     Kamera Depan
@@ -271,8 +268,8 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
                         key={idx}
                         type="button"
                         onClick={() => setSelectedPresetIndex(idx)}
-                        className={`w-14 h-14 rounded-full border-2 overflow-hidden transition-all bg-white p-1 ${
-                          selectedPresetIndex === idx ? 'border-[#5A5A40] scale-110 shadow-sm' : 'border-[#D4C9B8]/45 opacity-60'
+                        className={`w-14 h-14 rounded-full border-2 overflow-hidden transition-all bg-white p-1 cursor-pointer ${
+                          selectedPresetIndex === idx ? 'border-navy-700 scale-110 shadow-sm' : 'border-slate-200 opacity-60'
                         }`}
                       >
                         <img src={avatarUrl} alt="Avatar Preset" className="w-full h-full object-contain" />
@@ -280,20 +277,20 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
                     ))}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-3 bg-[#F0EEE9]/40 p-4 rounded-xl border border-[#D4C9B8]/60">
+                  <div className="flex flex-col items-center gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                     {capturedPhotoUrl ? (
-                      <div className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-[#5A5A40] bg-white">
+                      <div className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-navy-700 bg-white">
                         <img src={capturedPhotoUrl} alt="Captured Profile" className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => { setCapturedPhotoUrl(null); setIsCameraActive(true); }}
-                          className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                          className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
                         >
-                          <RefreshCw className="w-5 h-5 text-white" />
+                          <RefreshCw className="w-5 h-5 text-white animate-spin-slow" />
                         </button>
                       </div>
                     ) : (
-                      <div className="w-36 aspect-square rounded-xl overflow-hidden bg-neutral-900 border border-[#D4C9B8] relative flex items-center justify-center">
+                      <div className="w-36 aspect-square rounded-xl overflow-hidden bg-slate-900 border border-slate-200 relative flex items-center justify-center">
                         {isCameraActive ? (
                           <>
                             <video
@@ -306,7 +303,7 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
                             <button
                               type="button"
                               onClick={snapProfilePhoto}
-                              className="absolute bottom-2 px-3 py-1 bg-[#5A5A40] text-white text-[10px] font-bold uppercase rounded-lg shadow-md flex items-center gap-1.5"
+                              className="absolute bottom-2 px-3 py-1 bg-navy-800 text-white text-[10px] font-bold uppercase rounded-lg shadow-md flex items-center gap-1.5 cursor-pointer"
                             >
                               <Camera className="w-3.5 h-3.5" />
                               Ambil Foto
@@ -316,7 +313,7 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
                           <button
                             type="button"
                             onClick={() => setIsCameraActive(true)}
-                            className="flex flex-col items-center gap-1.5 text-white"
+                            className="flex flex-col items-center gap-1.5 text-white cursor-pointer"
                           >
                             <Camera className="w-6 h-6 opacity-80" />
                             <span className="text-[10px] font-bold uppercase tracking-wider">Aktifkan Kamera</span>
@@ -336,13 +333,13 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
                 <button
                   type="button"
                   onClick={() => { stopCamera(); setIsRegistering(false); }}
-                  className="flex-1 py-2.5 border border-[#D4C9B8] text-[#8C7E6C] font-semibold rounded-xl text-xs uppercase tracking-wider hover:bg-[#F0EEE9] transition-colors"
+                  className="flex-1 py-2.5 border border-slate-300 text-slate-500 font-semibold rounded-xl text-xs uppercase tracking-wider hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-[#5A5A40] text-white font-semibold rounded-xl text-xs uppercase tracking-wider hover:opacity-95 transition-all shadow-md flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 bg-navy-800 text-white font-semibold rounded-xl text-xs uppercase tracking-wider hover:bg-navy-900 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   Daftar & Masuk
@@ -359,17 +356,17 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
           >
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] uppercase font-bold tracking-widest text-[#8C7E6C]">
+                <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
                   Akses Masuk Karyawan
                 </span>
-                <h3 className="text-xl font-semibold text-[#3A3A35] mt-1">
+                <h3 className="text-xl font-semibold text-slate-800 mt-1">
                   Pilih Akun Anda
                 </h3>
               </div>
 
               <button
                 onClick={() => setIsRegistering(true)}
-                className="text-[10px] bg-[#5A5A40] text-white px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider flex items-center gap-1.5 hover:opacity-95 transition-all shadow-sm"
+                className="text-[10px] bg-navy-800 text-white px-3 py-1.5 rounded-lg font-bold uppercase tracking-wider flex items-center gap-1.5 hover:bg-navy-900 transition-all shadow-sm cursor-pointer"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 Registrasi Baru
@@ -379,48 +376,48 @@ export default function EmployeeAuth({ employees, onSelectEmployee, onCreateEmpl
             {/* List of Registered Employees */}
             <div className="max-h-72 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
               {employees.length === 0 ? (
-                <div className="text-center py-10 bg-white border border-dashed border-[#D4C9B8] rounded-xl">
-                  <User className="w-8 h-8 mx-auto text-[#8C7E6C] opacity-40 mb-2" />
-                  <p className="text-xs text-[#8C7E6C] font-semibold">Belum ada karyawan terdaftar.</p>
-                  <p className="text-[10px] text-[#8C7E6C] mt-1">Silakan lakukan registrasi baru di atas.</p>
+                <div className="text-center py-10 bg-slate-50 border border-dashed border-slate-300 rounded-xl">
+                  <User className="w-8 h-8 mx-auto text-slate-400 opacity-60 mb-2" />
+                  <p className="text-xs text-slate-500 font-semibold">Belum ada karyawan terdaftar.</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Silakan lakukan pendaftaran baru di atas.</p>
                 </div>
               ) : (
                 employees.map((emp) => (
                   <button
                     key={emp.id}
                     onClick={() => onSelectEmployee(emp.id)}
-                    className="w-full flex items-center justify-between p-4 bg-white hover:bg-[#F8F7F2] rounded-xl border border-[#D4C9B8]/75 hover:border-[#5A5A40] transition-all text-left group"
+                    className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50 rounded-xl border border-slate-200 hover:border-navy-500 transition-all text-left group cursor-pointer"
                   >
                     <div className="flex items-center gap-4">
                       {/* Employee Avatar */}
-                      <div className="w-11 h-11 rounded-full overflow-hidden bg-[#F0EEE9] border border-[#D4C9B8] flex items-center justify-center p-0.5 shadow-xs">
+                      <div className="w-11 h-11 rounded-full overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center p-0.5 shadow-xs">
                         <img
                           src={emp.photoUrl}
                           alt={emp.name}
                           className="w-full h-full object-cover rounded-full"
                           onError={(e) => {
                             // fallback SVG if direct image breaks
-                            (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%235A5A40"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>';
+                            (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%2311254A"><circle cx="50" cy="35" r="20" /><path d="M20,80 C20,60 30,55 50,55 C70,55 80,60 80,80 Z" /></svg>';
                           }}
                         />
                       </div>
 
                       <div>
-                        <h4 className="text-sm font-semibold text-[#3A3A35] group-hover:text-[#5A5A40] transition-colors">
+                        <h4 className="text-sm font-semibold text-slate-800 group-hover:text-navy-800 transition-colors">
                           {emp.name}
                         </h4>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] font-medium text-[#8C7E6C]">
+                        <div className="flex items-center gap-2 mt-0.5 font-sans">
+                          <span className="text-[10px] font-medium text-slate-500">
                             {emp.jabatan}
                           </span>
-                          <span className="text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-[#F0EEE9] text-[#8C7E6C] font-bold">
+                          <span className="text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 font-bold">
                             {emp.posisi}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="w-8 h-8 rounded-full bg-[#F8F7F2] border border-[#D4C9B8] flex items-center justify-center text-[#8C7E6C] group-hover:bg-[#5A5A40] group-hover:text-white transition-all">
+                    <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 group-hover:bg-navy-800 group-hover:text-white transition-all">
                       <ArrowRight className="w-4 h-4" />
                     </div>
                   </button>

@@ -134,63 +134,73 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
 
     try {
       const canvas = document.createElement('canvas');
-      const width = video.videoWidth || 640;
-      const height = video.videoHeight || 480;
-      canvas.width = width;
-      canvas.height = height;
+      // Set fixed 3:4 aspect ratio output size
+      const targetWidth = 600;
+      const targetHeight = 800;
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Could not get canvas context');
 
-      // 1. Draw camera video frame to canvas
-      ctx.drawImage(video, 0, 0, width, height);
+      const videoWidth = video.videoWidth || 640;
+      const videoHeight = video.videoHeight || 480;
 
-      // 2. Draw modern translucent charcoal overlay banner for watermark readability
-      const bannerHeight = height * 0.28;
-      ctx.fillStyle = 'rgba(28, 25, 23, 0.82)'; // Deep warm-toned dark
-      ctx.fillRect(0, height - bannerHeight, width, bannerHeight);
+      // Crop a 3:4 portrait area out of the center of landscape stream
+      const cropHeight = videoHeight;
+      const cropWidth = videoHeight * 0.75;
+      const sx = (videoWidth - cropWidth) / 2;
+      const sy = 0;
 
-      // 3. Draw architectural thin accent line in natural sand color
-      ctx.strokeStyle = '#D5C7B5'; 
-      ctx.lineWidth = Math.max(2, Math.floor(width / 350));
+      // 1. Draw camera video frame to 3:4 canvas
+      ctx.drawImage(video, sx, sy, cropWidth, cropHeight, 0, 0, targetWidth, targetHeight);
+
+      // 2. Draw modern translucent deep navy overlay banner for watermark readability
+      const bannerHeight = targetHeight * 0.28;
+      ctx.fillStyle = 'rgba(10, 22, 43, 0.88)'; // Deep Navy Blue transluscent
+      ctx.fillRect(0, targetHeight - bannerHeight, targetWidth, bannerHeight);
+
+      // 3. Draw architectural thin accent line in elegant Sky Blue color
+      ctx.strokeStyle = '#38BDF8'; 
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(0, height - bannerHeight);
-      ctx.lineTo(width, height - bannerHeight);
+      ctx.moveTo(0, targetHeight - bannerHeight);
+      ctx.lineTo(targetWidth, targetHeight - bannerHeight);
       ctx.stroke();
 
       // 4. Draw detailed watermark texts
-      const padding = Math.max(16, Math.floor(width / 26));
-      let currentY = height - bannerHeight + padding;
-      const fontSizeTitle = Math.max(15, Math.floor(width / 22));
-      const fontSizeMeta = Math.max(10, Math.floor(width / 32));
+      const padding = 24;
+      let currentY = targetHeight - bannerHeight + padding;
+      const fontSizeTitle = 24;
+      const fontSizeMeta = 13;
 
       // Draw Title "DIARSITEKI ABSENSI"
       ctx.fillStyle = '#FFFFFF';
-      ctx.font = `bold ${fontSizeTitle}px "Inter", sans-serif`;
+      ctx.font = `bold ${fontSizeTitle}px "Poppins", "Inter", sans-serif`;
       ctx.fillText('DIARSITEKI ABSENSI', padding, currentY + fontSizeTitle * 0.8);
       
-      // Draw minimal wood accent badge next to title
-      ctx.fillStyle = '#E6D7C3';
-      const badgeWidth = Math.max(60, Math.floor(width / 8));
-      const badgeHeight = Math.max(14, Math.floor(width / 32));
-      ctx.fillRect(width - padding - badgeWidth, currentY, badgeWidth, badgeHeight);
-      ctx.fillStyle = '#4A453F';
-      ctx.font = `bold ${Math.max(7, Math.floor(width / 45))}px "Inter", sans-serif`;
+      // Draw minimal status accent badge next to title
+      ctx.fillStyle = '#38BDF8';
+      const badgeWidth = 90;
+      const badgeHeight = 22;
+      ctx.fillRect(targetWidth - padding - badgeWidth, currentY, badgeWidth, badgeHeight);
+      ctx.fillStyle = '#0A162B';
+      ctx.font = `bold 10px "Poppins", "Inter", sans-serif`;
       ctx.textAlign = 'center';
       ctx.fillText(
         status.toUpperCase(), 
-        width - padding - (badgeWidth / 2), 
-        currentY + (badgeHeight / 2) + Math.max(2, Math.floor(width / 110))
+        targetWidth - padding - (badgeWidth / 2), 
+        currentY + 15
       );
       
       // Reset text alignment
       ctx.textAlign = 'left';
-      currentY += fontSizeTitle * 1.35;
+      currentY += fontSizeTitle * 1.4;
 
       // Draw a subtle partition line
-      ctx.fillStyle = 'rgba(213, 199, 181, 0.25)';
-      ctx.fillRect(padding, currentY, width - (padding * 2), 1);
-      currentY += Math.max(10, Math.floor(width / 60));
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+      ctx.fillRect(padding, currentY, targetWidth - (padding * 2), 1);
+      currentY += 16;
 
       // Build date & time string
       const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -207,8 +217,8 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
         : 'GPS Tidak Tersedia (Menggunakan Lokasi Proyek Standar)';
 
       // Set font to monospace for clean metadata alignment
-      ctx.fillStyle = '#ECE9E4';
-      ctx.font = `${fontSizeMeta}px "Courier New", Courier, monospace`;
+      ctx.fillStyle = '#F0F4F8';
+      ctx.font = `${fontSizeMeta}px "Poppins", "Courier New", Courier, monospace`;
 
       const metadataLines = [
         `KARYAWAN : ${employeeName || 'Karyawan Umum'}${employeeJabatan ? ` (${employeeJabatan})` : ''}`,
@@ -219,7 +229,7 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
 
       metadataLines.forEach(line => {
         ctx.fillText(line, padding, currentY + fontSizeMeta * 0.8);
-        currentY += fontSizeMeta * 1.35;
+        currentY += fontSizeMeta * 1.4;
       });
 
       // Convert to Base64 image
@@ -245,28 +255,28 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#3A3A35]/50 backdrop-blur-md">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md font-sans">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-          className="relative w-full max-w-md bg-[#F8F7F2] rounded-2xl overflow-hidden border border-[#D4C9B8] shadow-2xl flex flex-col max-h-[90vh]"
+          className="relative w-full max-w-md bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-2xl flex flex-col max-h-[95vh]"
         >
           {/* Header Modal */}
-          <div className="px-5 py-4 border-b border-[#D4C9B8] flex justify-between items-center bg-white">
+          <div className="px-5 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
             <div>
-              <span className="text-[10px] tracking-widest text-[#8C7E6C] uppercase font-semibold">
+              <span className="text-[10px] tracking-widest text-slate-500 uppercase font-semibold">
                 Sesi Absensi
               </span>
-              <h2 className="text-sm font-semibold text-[#3A3A35] flex items-center gap-2">
-                Absen {status} - <span className={status === 'Masuk' ? 'text-[#5A5A40] font-bold' : 'text-[#8C7E6C] font-bold'}>{status}</span>
+              <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                Absen {status} - <span className={status === 'Masuk' ? 'text-navy-600 font-bold' : 'text-slate-500 font-bold'}>{status}</span>
               </h2>
             </div>
             <button
               onClick={onClose}
               id="btn_close_camera"
-              className="p-1.5 rounded-full hover:bg-[#F8F7F2] text-[#8C7E6C] transition-colors"
+              className="p-1.5 rounded-full hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -297,7 +307,7 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
                 </div>
                 <button
                   onClick={startCamera}
-                  className="w-full mt-2 py-2 px-3 bg-white hover:bg-amber-100 text-amber-900 font-medium rounded-lg border border-amber-200 transition-colors flex items-center justify-center gap-2 text-[11px]"
+                  className="w-full mt-2 py-2 px-3 bg-white hover:bg-amber-100 text-amber-900 font-medium rounded-lg border border-amber-200 transition-colors flex items-center justify-center gap-2 text-[11px] cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5 text-amber-700" />
                   Coba Mulai Kamera Lagi
@@ -307,25 +317,25 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
 
             {/* 2. Geolocation Status */}
             {!photoUrl && (
-              <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-[#D4C9B8] text-xs">
-                <div className="flex items-center gap-2 text-[#3A3A35]">
-                  <MapPin className={`w-4 h-4 ${location ? 'text-[#5A5A40]' : 'text-[#8C7E6C] animate-pulse'}`} />
+              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <MapPin className={`w-4 h-4 ${location ? 'text-navy-600' : 'text-slate-400'}`} />
                   <div>
                     {locationLoading ? (
-                      <span className="text-[#8C7E6C]">Mencari koordinat GPS Anda...</span>
+                      <span className="text-slate-400">Mencari koordinat GPS Anda...</span>
                     ) : location ? (
-                      <span className="font-mono text-[#3A3A35]">
+                      <span className="font-mono text-slate-750">
                         GPS Terkunci: {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
                       </span>
                     ) : (
-                      <span className="text-amber-700 font-semibold">GPS gagal dimuat. Izinkan lokasi.</span>
+                      <span className="text-amber-750 font-semibold">GPS gagal dimuat. Izinkan lokasi.</span>
                     )}
                   </div>
                 </div>
                 {(!location && !locationLoading) && (
                   <button
                     onClick={getLocation}
-                    className="text-[11px] text-[#8C7E6C] font-semibold underline hover:text-[#5A5A40]"
+                    className="text-[11px] text-navy-600 font-semibold underline hover:text-navy-800 cursor-pointer"
                   >
                     Muat Ulang GPS
                   </button>
@@ -333,8 +343,8 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
               </div>
             )}
 
-            {/* 3. Stream & Preview Stage */}
-            <div className="relative aspect-video rounded-xl overflow-hidden bg-[#E8E6DF] border border-[#D4C9B8] shadow-inner flex items-center justify-center">
+            {/* 3. Stream & Preview Stage (Forced to aspect-[3/4]) */}
+            <div className="relative aspect-[3/4] max-h-[50vh] mx-auto rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-inner flex items-center justify-center">
               {!photoUrl ? (
                 <>
                   {/* Video Element */}
@@ -348,8 +358,8 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
 
                   {/* Loading overlay for camera initialization */}
                   {permission.camera === 'loading' && (
-                    <div className="absolute inset-0 bg-[#23211F] flex flex-col items-center justify-center gap-3 text-[#ECE9E4]">
-                      <RotateCw className="w-8 h-8 animate-spin text-[#E6D7C3]" />
+                    <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center gap-3 text-slate-100">
+                      <RotateCw className="w-8 h-8 animate-spin text-navy-400" />
                       <span className="text-xs tracking-wider">Menghubungkan Kamera...</span>
                     </div>
                   )}
@@ -360,14 +370,14 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
                       onClick={toggleCamera}
                       id="btn_toggle_facing_mode"
                       title="Ubah Kamera Depan/Belakang"
-                      className="absolute top-3 right-3 p-2 bg-black/40 hover:bg-black/60 rounded-full text-white transition-all backdrop-blur-xs border border-white/10"
+                      className="absolute top-3 right-3 p-2 bg-black/40 hover:bg-black/60 rounded-full text-white transition-all backdrop-blur-xs border border-white/10 cursor-pointer"
                     >
                       <RotateCw className="w-4 h-4" />
                     </button>
                   )}
                 </>
               ) : (
-                /* Watermarked Image Preview */
+                /* Watermarked Image Preview (Enforces 3:4) */
                 <img
                   src={photoUrl}
                   alt="Watermarked Preview"
@@ -376,14 +386,14 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
               )}
             </div>
 
-            {/* 4. Notes input (highly beneficial for architectural work) */}
+            {/* 4. Notes input */}
             {photoUrl && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 className="space-y-1"
               >
-                <label className="text-[11px] tracking-wide text-[#8C7E6C] uppercase font-semibold">
+                <label className="text-[11px] tracking-wide text-slate-500 uppercase font-semibold">
                   Catatan Proyek (Opsional)
                 </label>
                 <textarea
@@ -392,20 +402,20 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
                   placeholder="Contoh: Pekerjaan beton lantai 2, pengecekan kolom..."
                   rows={2}
                   maxLength={150}
-                  className="w-full px-3 py-2 text-xs bg-white border border-[#D4C9B8] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#8C7E6C] text-[#3A3A35] resize-none font-sans"
+                  className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-navy-500 text-slate-800 resize-none font-sans"
                 />
               </motion.div>
             )}
           </div>
 
           {/* Action Footer */}
-          <div className="px-5 py-4 border-t border-[#D4C9B8] bg-white flex flex-col sm:flex-row gap-3">
+          <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row gap-3">
             {!photoUrl ? (
               <button
                 onClick={capturePhoto}
                 disabled={permission.camera !== 'granted' || isCapturing}
                 id="btn_capture_attendance"
-                className="w-full py-3 bg-[#5A5A40] hover:bg-[#484833] disabled:bg-[#C9C3BA] disabled:cursor-not-allowed text-white font-medium rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 text-sm uppercase tracking-wider"
+                className="w-full py-3 bg-navy-800 hover:bg-navy-900 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 text-sm uppercase tracking-wider cursor-pointer"
               >
                 <Camera className="w-4 h-4" />
                 {isCapturing ? 'Memproses Watermark...' : 'Ambil Foto Absensi'}
@@ -418,15 +428,15 @@ export default function CameraModal({ isOpen, status, onClose, onSave, employeeN
                     startCamera();
                   }}
                   id="btn_retake_photo"
-                  className="w-full py-2.5 border-2 border-[#D4C9B8] bg-white hover:bg-[#F0EEE9] text-[#8C7E6C] font-semibold rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
+                  className="w-full py-2.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 font-semibold rounded-xl transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <RefreshCw className="w-4 h-4 text-[#8C7E6C]" />
+                  <RefreshCw className="w-4 h-4 text-slate-500" />
                   Ulangi Foto
                 </button>
                 <button
                   onClick={handleSave}
                   id="btn_save_attendance"
-                  className="w-full py-2.5 bg-emerald-750 hover:bg-emerald-800 text-white font-semibold rounded-xl transition-all shadow-sm text-sm flex items-center justify-center gap-2"
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   Simpan Absensi
