@@ -1,193 +1,88 @@
-# Security Specification - Firebase Security Rules
+# Firebase Security Specification - DIARSITEKI ABSENSI
+
+This document defines the security specification, invariants, and threat vectors ("Dirty Dozen" payloads) for the Diarsiteki Absensi application.
 
 ## 1. Data Invariants
-- **Authentication**: All writes must be authenticated. Users can view/check their own attendance and profiles, or write their own attendance check-ins. Admins have complete read/write access.
-- **Identity Integrity**: For check-ins (`attendance`), a standard employee can only create/update records where `employeeId` matches their authenticated `uid`.
-- **Temporal Consistency**: The `createdAt` and `updatedAt` timestamps must match the server-time or existing database records (no forward-dating or backward-dating by clients).
-- **Immutable Keys**: Core identifiers like `id`, `employeeId`, `date` cannot be changed after creation.
-- **Strict Size/Format Constraints**: High-density fields like Base64 images and notes must conform to reasonable size bounds (e.g., photo fields must be string and notes must be <= 500 characters).
+
+1. **Employee Verification**:
+   - An employee ID must be a valid, non-empty, alphanumeric string.
+   - The field `posisi` must be strictly restricted to values: `Kantor` or `Lapangan`.
+   - The field `jabatan` must be a valid work title of reasonable length (max 100 characters).
+
+2. **Attendance Integrity**:
+   - Each `attendancePair` document must refer to an existing `employeeId`.
+   - The document ID should adhere to the format `pair_${employeeId}_${date}` to prevent duplicate entries for an employee on a single day.
+   - The `date` must conform to the `YYYY-MM-DD` format.
+   - The `status` must strictly be one of: `Hadir`, `Telat`, `Sakit`, `Izin`, `Cuti`.
+   - `masuk` and `pulang` details, if present, must contain a valid timestamp (`HH:MM:SS`), non-empty watermarked `photoUrl`, and optional numeric GPS location coordinates.
 
 ---
 
-## 2. The "Dirty Dozen" Payloads
-These malicious or illegal payloads try to bypass security, overwrite other users' data, or execute unauthorized operations.
+## 2. The "Dirty Dozen" Payloads (Negative Threat Vectors)
 
-### Case 1: Anonymous Write
-*Goal: Write an employee profile or attendance without signing in.*
-```json
-{
-  "collection": "attendance",
-  "docId": "pair_anon_2026-07-14",
-  "payload": {
-    "id": "pair_anon_2026-07-14",
-    "employeeId": "emp_hendra",
-    "date": "2026-07-14",
-    "dateLabel": "Selasa, 14 Juli 2026",
-    "status": "Hadir"
-  },
-  "auth": null
-}
-```
+The following 12 malicious payloads represent attempts to compromise Identity, Integrity, or State within the application:
 
-### Case 2: Spoof Identity (Create)
-*Goal: Authenticated user A tries to create an attendance record for employee B.*
-```json
-{
-  "collection": "attendance",
-  "docId": "pair_b_2026-07-14",
-  "payload": {
-    "id": "pair_b_2026-07-14",
-    "employeeId": "emp_budi",
-    "date": "2026-07-14",
-    "dateLabel": "Selasa, 14 Juli 2026",
-    "status": "Hadir"
-  },
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 1: ID Poisoning (Resource Poisoning)
+- **Path**: `/employees/emp_MALICIOUS_LONG_JUNK_ID_SPAM_TRASH_1234567890`
+- **Payload**: Attempting to create an employee with an ID exceeding 128 characters or containing non-alphanumeric junk characters.
+- **Expected Result**: `PERMISSION_DENIED`
 
-### Case 3: Identity Swapping (Update)
-*Goal: Authenticated user A tries to change the employeeId of an existing record to employee B.*
-```json
-{
-  "collection": "attendance",
-  "docId": "pair_hendra_2026-07-14",
-  "payload": {
-    "employeeId": "emp_budi"
-  },
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 2: Self-Assigned Administrative Privileges
+- **Path**: `/employees/emp_hacker`
+- **Payload**: `{ "id": "emp_hacker", "name": "Hacker", "jabatan": "Principal Architect", "posisi": "Kantor", "photoUrl": "...", "isAdmin": true }`
+- **Expected Result**: `PERMISSION_DENIED` (No unsolicited admin fields allowed inside user profiles)
 
-### Case 4: Rogue Admin Promotion
-*Goal: User attempts to declare themselves an admin by writing to the `/admins` collection or modifying employee metadata.*
-```json
-{
-  "collection": "employees",
-  "docId": "emp_hendra",
-  "payload": {
-    "id": "emp_hendra",
-    "name": "Arch. Hendra Kurniawan",
-    "jabatan": "Principal Architect",
-    "posisi": "Kantor",
-    "isAdmin": true
-  },
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 3: Invalid Employee Work Location
+- **Path**: `/employees/emp_dani`
+- **Payload**: `{ "id": "emp_dani", "name": "Dani", "jabatan": "Site Manager", "posisi": "Hacker_Space", "photoUrl": "..." }`
+- **Expected Result**: `PERMISSION_DENIED` (`posisi` must be 'Kantor' or 'Lapangan')
 
-### Case 5: Infinite Notes Injection (Denial of Wallet)
-*Goal: Injecting a multi-megabyte string into notes to consume server memory/storage.*
-```json
-{
-  "collection": "attendance",
-  "docId": "pair_hendra_2026-07-14",
-  "payload": {
-    "notes": "A".repeat(1000000)
-  },
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 4: Invalid Attendance Date Format
+- **Path**: `/attendance/pair_emp_hendra_invalid_date`
+- **Payload**: `{ "id": "pair_emp_hendra_invalid_date", "employeeId": "emp_hendra", "date": "13-07-2026", "dateLabel": "Senin, 13 Juli 2026", "status": "Hadir" }`
+- **Expected Result**: `PERMISSION_DENIED` (date must be YYYY-MM-DD)
 
-### Case 6: Invalid Enum Value
-*Goal: Setting an arbitrary text string for status.*
-```json
-{
-  "collection": "attendance",
-  "docId": "pair_hendra_2026-07-14",
-  "payload": {
-    "id": "pair_hendra_2026-07-14",
-    "employeeId": "emp_hendra",
-    "date": "2026-07-14",
-    "dateLabel": "Selasa, 14 Juli 2026",
-    "status": "MALICIOUS_SUPER_STATUS"
-  },
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 5: Spoofed Attendance Status (Illegal State)
+- **Path**: `/attendance/pair_emp_hendra_2026-07-13`
+- **Payload**: `{ "id": "pair_emp_hendra_2026-07-13", "employeeId": "emp_hendra", "date": "2026-07-13", "dateLabel": "Senin, 13 Juli 2026", "status": "SuperHadir" }`
+- **Expected Result**: `PERMISSION_DENIED` (status must be within the defined enum list)
 
-### Case 7: Future-Dating Check-in
-*Goal: Setting a timestamp that is in the future instead of server-time.*
-```json
-{
-  "collection": "attendance",
-  "docId": "pair_hendra_2026-07-14",
-  "payload": {
-    "masuk": {
-      "timestamp": "23:59:59",
-      "location": { "latitude": 0, "longitude": 0 },
-      "photoUrl": "some_photo",
-      "notes": "In the future"
-    }
-  },
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 6: Missing Required Attendance Fields on Create
+- **Path**: `/attendance/pair_emp_hendra_2026-07-13`
+- **Payload**: `{ "id": "pair_emp_hendra_2026-07-13", "employeeId": "emp_hendra" }`
+- **Expected Result**: `PERMISSION_DENIED` (missing `date`, `dateLabel`, `status`)
 
-### Case 8: Malicious ID Poisoning
-*Goal: Create a document with an extremely long or path-injection ID.*
-```json
-{
-  "collection": "employees",
-  "docId": "emp_hendra/subcollection/maliciousID....",
-  "payload": {
-    "id": "invalid",
-    "name": "Poisoner"
-  },
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 7: Orphaned Attendance Record (Non-existent Employee)
+- **Path**: `/attendance/pair_fake_emp_2026-07-13`
+- **Payload**: `{ "id": "pair_fake_emp_2026-07-13", "employeeId": "fake_employee_id", "date": "2026-07-13", "dateLabel": "Senin, 13 Juli 2026", "status": "Hadir" }`
+- **Expected Result**: `PERMISSION_DENIED` (foreign key constraint: employee must exist in `/employees`)
 
-### Case 9: Altering Work Placement Without Authorization
-*Goal: Standard employee trying to change their placement `posisi` in profile.*
-```json
-{
-  "collection": "employees",
-  "docId": "emp_hendra",
-  "payload": {
-    "posisi": "Lapangan"
-  },
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 8: Write-Bypass of Terminal Status
+- **Path**: `/attendance/pair_emp_sarah_2026-07-11` (Existing is 'Sakit')
+- **Payload**: Trying to update status from 'Sakit' (Terminal) to 'Hadir' without admin authorization.
+- **Expected Result**: `PERMISSION_DENIED`
 
-### Case 10: Deleting Attendance Records
-*Goal: Standard employee trying to delete an old attendance record.*
-```json
-{
-  "collection": "attendance",
-  "docId": "pair_hendra_2026-07-10",
-  "action": "delete",
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 9: Invalid Geo-Coordinates Injection
+- **Path**: `/attendance/pair_emp_hendra_2026-07-13`
+- **Payload**: `{ "id": "pair_emp_hendra_2026-07-13", "employeeId": "emp_hendra", "date": "2026-07-13", "dateLabel": "Senin, 13 Juli 2026", "status": "Hadir", "masuk": { "timestamp": "08:00:00", "photoUrl": "...", "location": { "latitude": 95.0, "longitude": 200.0 } } }`
+- **Expected Result**: `PERMISSION_DENIED` (latitude/longitude out of valid geographic ranges)
 
-### Case 11: Stealing Other Employee's Profile PII
-*Goal: Attempting to retrieve detailed profiles of employees when unauthorized (such as secret data).*
-```json
-{
-  "collection": "employees",
-  "docId": "emp_budi",
-  "action": "get",
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 10: Anonymous Public Query Scraping (Denial of Wallet)
+- **Operation**: Public unauthenticated read of all attendance logs.
+- **Expected Result**: `PERMISSION_DENIED`
 
-### Case 12: Overwriting Existing Complete Logs
-*Goal: Overwriting a completed record containing a clock-out signature.*
-```json
-{
-  "collection": "attendance",
-  "docId": "pair_hendra_2026-07-10",
-  "payload": {
-    "status": "Telat"
-  },
-  "auth": { "uid": "emp_hendra" }
-}
-```
+### Payload 11: Tampering with Other Employees' Existing Records
+- **Path**: `/attendance/pair_emp_hendra_2026-07-13`
+- **Payload**: User authenticated as `emp_sarah` trying to edit `emp_hendra`'s clock-in details.
+- **Expected Result**: `PERMISSION_DENIED`
+
+### Payload 12: Extra Ghost Fields Insertion (Shadow Update)
+- **Path**: `/employees/emp_hendra`
+- **Payload**: `{ "id": "emp_hendra", "name": "Hendra", "jabatan": "Principal", "posisi": "Kantor", "photoUrl": "...", "extraGhostField": "maliciousValue" }`
+- **Expected Result**: `PERMISSION_DENIED` (Strict schema prevents ghost fields)
 
 ---
 
-## 3. The Conceptual Test Suite
-The security rules must enforce all constraints so that the client SDK receives `PERMISSION_DENIED` for any of the above operations.
-Our security rules defined in `firestore.rules` will explicitly reject these cases.
+## 3. The Test Runner Spec
+
+The accompanying rules inside `firestore.rules` will be evaluated to ensure that all twelve payloads are blocked effectively.

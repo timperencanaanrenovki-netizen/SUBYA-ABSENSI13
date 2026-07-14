@@ -1,88 +1,48 @@
 {
   "entities": {
-    "Employee": {
+    "employee": {
       "title": "Employee",
-      "description": "Employee profile details",
+      "description": "Information about an employee registered in Diarsiteki Absensi.",
       "type": "object",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique employee identifier"
-        },
-        "name": {
-          "type": "string",
-          "description": "Full name of the employee"
-        },
-        "jabatan": {
-          "type": "string",
-          "description": "Job role or title of the employee"
-        },
-        "posisi": {
-          "type": "string",
-          "enum": ["Kantor", "Lapangan"],
-          "description": "Work placement location type"
-        },
-        "photoUrl": {
-          "type": "string",
-          "description": "Base64 encoded string or URL of the employee's profile photo"
-        }
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "jabatan": { "type": "string", "maxLength": 100 },
+        "posisi": { "type": "string", "enum": ["Kantor", "Lapangan"] },
+        "photoUrl": { "type": "string" }
       },
-      "required": ["id", "name", "jabatan", "posisi"]
+      "required": ["id", "name", "jabatan", "posisi", "photoUrl"]
     },
-    "AttendancePair": {
+    "attendancePair": {
       "title": "AttendancePair",
-      "description": "Detailed attendance pair record for a specific day and employee",
+      "description": "A pair of clock-in (masuk) and clock-out (pulang) attendance details for a given employee and date.",
       "type": "object",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique key matching employee ID and date"
-        },
-        "employeeId": {
-          "type": "string",
-          "description": "Referenced employee identifier"
-        },
-        "date": {
-          "type": "string",
-          "description": "Date format YYYY-MM-DD"
-        },
-        "dateLabel": {
-          "type": "string",
-          "description": "Human-readable Indonesian formatted date"
-        },
-        "status": {
-          "type": "string",
-          "enum": ["Hadir", "Telat", "Sakit", "Izin", "Cuti"],
-          "description": "Attendance classification"
-        },
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "dateLabel": { "type": "string" },
+        "status": { "type": "string", "enum": ["Hadir", "Telat", "Sakit", "Izin", "Cuti"] },
         "masuk": {
-          "type": "object",
-          "description": "Clock-in detail map containing timestamp, photo, location and optional notes"
+          "type": "object"
         },
         "pulang": {
-          "type": "object",
-          "description": "Clock-out detail map containing timestamp, photo, location and optional notes"
+          "type": "object"
         },
-        "workDurationMinutes": {
-          "type": "number",
-          "description": "Calculated total duration of work in minutes"
-        },
-        "notes": {
-          "type": "string",
-          "description": "General or specific attendance override notes"
-        }
+        "workDurationMinutes": { "type": "integer" },
+        "notes": { "type": "string", "maxLength": 500 }
       },
       "required": ["id", "employeeId", "date", "dateLabel", "status"]
     }
   },
   "firestore": {
-    "employees/{employeeId}": {
-      "schema": "Employee",
-      "description": "Storage collection for all active employee records"
+    "/employees/{employeeId}": {
+      "schema": "employee",
+      "description": "Collection of registered employees."
     },
-    "attendance/{attendanceId}": {
-      "schema": "AttendancePair",
-      "description": "Storage collection for daily check-in/out and general attendance logs"
+    "/attendance/{attendanceId}": {
+      "schema": "attendancePair",
+      "description": "Collection of daily attendance records."
     }
   }
 }

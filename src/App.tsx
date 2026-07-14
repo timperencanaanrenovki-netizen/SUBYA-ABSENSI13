@@ -15,9 +15,7 @@ import {
   Briefcase,
   Layers,
   CalendarCheck,
-  Lock,
-  Share2,
-  Link
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ScandinavianHeader from './components/ScandinavianHeader';
@@ -26,20 +24,8 @@ import EmployeeAuth from './components/EmployeeAuth';
 import AdminDashboard from './components/AdminDashboard';
 import { Employee, AttendancePair, AttendanceStatus } from './types';
 import { INITIAL_EMPLOYEES, INITIAL_ATTENDANCE } from './data';
-
-// Firebase imports
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  onSnapshot, 
-  getDocFromServer,
-  updateDoc,
-  deleteDoc
-} from 'firebase/firestore';
-import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
-import { db, auth, handleFirestoreError, OperationType } from './firebase';
+import { db, handleFirestoreError, OperationType } from './firebase';
+import { collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 // Simulation Date: Senin, 13 Juli 2026 (based on meta-context)
 const TODAY_DATE = "2026-07-13";
@@ -52,44 +38,16 @@ const timeToMinutes = (timeStr: string) => {
 };
 
 export default function App() {
-  // 1. Core Persistent State
+  // 1. Core Persistent State - Hydrated from Firestore
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<AttendancePair[]>([]);
+
   const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(() => {
     return localStorage.getItem('diarsiteki_current_emp_v2');
   });
 
   // 2. UI Control States
   const [activeTab, setActiveTab] = useState<'karyawan' | 'admin'>('karyawan');
-  
-  // Special Employee Portal Link states
-  const [isEmployeePortal, setIsEmployeePortal] = useState<boolean>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('role') === 'karyawan' || 
-           params.get('mode') === 'karyawan' || 
-           window.location.hash.includes('karyawan');
-  });
-  const [isLinkCopied, setIsLinkCopied] = useState(false);
-
-  const handleCopyEmployeeLink = () => {
-    const baseUrl = window.location.origin + window.location.pathname;
-    const employeePortalUrl = `${baseUrl}?role=karyawan`;
-    navigator.clipboard.writeText(employeePortalUrl)
-      .then(() => {
-        setIsLinkCopied(true);
-        setTimeout(() => setIsLinkCopied(false), 2000);
-      })
-      .catch((err) => {
-        console.error('Failed to copy link: ', err);
-      });
-  };
-
-  // If employee portal link is accessed, lock mode to karyawan
-  useEffect(() => {
-    if (isEmployeePortal) {
-      setActiveTab('karyawan');
-    }
-  }, [isEmployeePortal]);
   const [selectedDate, setSelectedDate] = useState<string>(TODAY_DATE); // for calendar filter
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [activeStatus, setActiveStatus] = useState<'Masuk' | 'Pulang'>('Masuk');
@@ -102,11 +60,6 @@ export default function App() {
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
 
-  // Firebase Auth State
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
-  // Handle Admin Password Login
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (adminPasswordInput === 'admin123') {
@@ -124,118 +77,58 @@ export default function App() {
     localStorage.removeItem('diarsiteki_admin_auth_v2');
   };
 
-  const handleGoogleSignIn = async () => {
-    try {
-      const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      if (result.user && result.user.email === 'timperencanaanrenovki@gmail.com') {
-        setIsAdminAuthenticated(true);
-        localStorage.setItem('diarsiteki_admin_auth_v2', 'true');
-        setAdminAuthError(null);
-      } else {
-        setAdminAuthError('Akses Ditolak: Hanya email admin yang diperbolehkan.');
-      }
-    } catch (e) {
-      console.error(e);
-      setAdminAuthError('Gagal masuk menggunakan Google.');
-    }
-  };
-
-  // Setup Firebase Auth session (Anonymous by default, or Google Auth for Admin)
+  // Real-time Firestore synchronization & database seeding
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setCurrentUser(user);
-        setAuthLoading(false);
+    const pathEmployees = 'employees';
+    const pathAttendance = 'attendance';
+
+    const unsubEmp = onSnapshot(collection(db, pathEmployees), (snapshot) => {
+      const list: Employee[] = [];
+      snapshot.forEach(docSnap => {
+        list.push(docSnap.data() as Employee);
+      });
+      
+      if (snapshot.empty) {
+        // Database is empty on first boot: seed initial employees
+        INITIAL_EMPLOYEES.forEach(emp => {
+          setDoc(doc(db, pathEmployees, emp.id), emp).catch(err => {
+            handleFirestoreError(err, OperationType.WRITE, `${pathEmployees}/${emp.id}`);
+          });
+        });
       } else {
-        try {
-          await signInAnonymously(auth);
-        } catch (e) {
-          console.error("Anonymous authentication failed:", e);
-          setAuthLoading(false);
-        }
+        setEmployees(list);
       }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, pathEmployees);
     });
-    return () => unsubscribe();
-  }, []);
 
-  // Liveness check for Firebase connection
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
-      }
-    }
-    testConnection();
-  }, []);
+    const unsubAtt = onSnapshot(collection(db, pathAttendance), (snapshot) => {
+      const list: AttendancePair[] = [];
+      snapshot.forEach(docSnap => {
+        list.push(docSnap.data() as AttendancePair);
+      });
 
-  // Sync Employees from Firestore
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, 'employees'),
-      (snapshot) => {
-        const list: Employee[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as Employee);
-        });
-        
-        if (list.length === 0) {
-          // Seed initial employees
-          INITIAL_EMPLOYEES.forEach(async (emp) => {
-            try {
-              await setDoc(doc(db, 'employees', emp.id), emp);
-            } catch (e) {
-              console.error("Error seeding employee:", e);
-            }
+      if (snapshot.empty) {
+        // Database is empty on first boot: seed initial attendance records
+        INITIAL_ATTENDANCE.forEach(item => {
+          setDoc(doc(db, pathAttendance, item.id), item).catch(err => {
+            handleFirestoreError(err, OperationType.WRITE, `${pathAttendance}/${item.id}`);
           });
-        } else {
-          setEmployees(list);
-        }
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.GET, 'employees');
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  // Sync Attendance from Firestore
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      collection(db, 'attendance'),
-      (snapshot) => {
-        const list: AttendancePair[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as AttendancePair);
         });
-
-        if (list.length === 0) {
-          // Seed initial attendance
-          INITIAL_ATTENDANCE.forEach(async (att) => {
-            try {
-              await setDoc(doc(db, 'attendance', att.id), att);
-            } catch (e) {
-              console.error("Error seeding attendance:", e);
-            }
-          });
-        } else {
-          list.sort((a, b) => b.date.localeCompare(a.date));
-          setAttendance(list);
-        }
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.GET, 'attendance');
+      } else {
+        list.sort((a, b) => b.date.localeCompare(a.date));
+        setAttendance(list);
       }
-    );
-    return () => unsubscribe();
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, pathAttendance);
+    });
+
+    return () => {
+      unsubEmp();
+      unsubAtt();
+    };
   }, []);
 
-  // Sync current employee selection to local storage
   useEffect(() => {
     if (currentEmployeeId) {
       localStorage.setItem('diarsiteki_current_emp_v2', currentEmployeeId);
@@ -243,14 +136,6 @@ export default function App() {
       localStorage.removeItem('diarsiteki_current_emp_v2');
     }
   }, [currentEmployeeId]);
-
-  // Handle Google Admin state sync
-  useEffect(() => {
-    if (currentUser?.email === "timperencanaanrenovki@gmail.com") {
-      setIsAdminAuthenticated(true);
-      localStorage.setItem('diarsiteki_admin_auth_v2', 'true');
-    }
-  }, [currentUser]);
 
   // Find active employee info
   const activeEmployee = employees.find(e => e.id === currentEmployeeId);
@@ -271,15 +156,15 @@ export default function App() {
     return `${h} jam ${m} menit`;
   };
 
-  // Handle new employee registration
+  // Handle new employee registration in Firestore
   const handleCreateEmployee = async (newEmp: Omit<Employee, 'id'>) => {
     const newId = `emp_${Date.now()}`;
     const created: Employee = { id: newId, ...newEmp };
     try {
       await setDoc(doc(db, 'employees', newId), created);
       setCurrentEmployeeId(newId);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `employees/${newId}`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, `employees/${newId}`);
     }
   };
 
@@ -289,7 +174,7 @@ export default function App() {
     setIsCameraOpen(true);
   };
 
-  // Save watermarked record
+  // Save watermarked record in Firestore
   const handleSaveAttendance = async (
     photoUrl: string, 
     location: { latitude: number; longitude: number } | null, 
@@ -313,16 +198,15 @@ export default function App() {
       timestamp: timestampStr,
       photoUrl,
       location,
-      notes: notes.trim() || undefined
+      notes: notes.trim() || null
     };
 
     const docId = `pair_${currentEmployeeId}_${TODAY_DATE}`;
-    const docRef = doc(db, 'attendance', docId);
+    const attendanceRef = doc(db, 'attendance', docId);
+    const existingPair = attendance.find(p => p.id === docId);
 
     try {
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const existingPair = docSnap.data() as AttendancePair;
+      if (existingPair) {
         const pair = { ...existingPair };
         if (activeStatus === 'Masuk') {
           pair.masuk = detail;
@@ -335,7 +219,7 @@ export default function App() {
             pair.workDurationMinutes = pMin - mMin;
           }
         }
-        await setDoc(docRef, pair);
+        await setDoc(attendanceRef, pair);
       } else {
         const newPair: AttendancePair = {
           id: docId,
@@ -353,19 +237,19 @@ export default function App() {
           newPair.workDurationMinutes = pMin - mMin;
         }
 
-        await setDoc(docRef, newPair);
+        await setDoc(attendanceRef, newPair);
       }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `attendance/${docId}`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `attendance/${docId}`);
     }
   };
 
-  // Manual actions for admin
+  // Manual actions for admin in Firestore
   const handleUpdatePairStatus = async (pairId: string, status: AttendanceStatus) => {
     try {
       await updateDoc(doc(db, 'attendance', pairId), { status });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `attendance/${pairId}`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `attendance/${pairId}`);
     }
   };
 
@@ -394,21 +278,21 @@ export default function App() {
       masuk: null,
       pulang: null,
       workDurationMinutes: undefined,
-      notes: notes || undefined
+      notes: notes?.trim() || null
     };
 
     try {
       await setDoc(doc(db, 'attendance', docId), newPair);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `attendance/${docId}`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `attendance/${docId}`);
     }
   };
 
   const handleDeletePair = async (pairId: string) => {
     try {
       await deleteDoc(doc(db, 'attendance', pairId));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `pairId`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `attendance/${pairId}`);
     }
   };
 
@@ -439,82 +323,46 @@ export default function App() {
           <ScandinavianHeader />
 
           {/* Double Tabs Navigation (Role Selector) */}
-          {isEmployeePortal ? (
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#D4C9B8]/60 pb-4">
-              <div className="flex items-center gap-2.5 bg-[#5A5A40] text-white px-4 py-2.5 rounded-xl border border-[#D4C9B8]/20 shadow-xs">
-                <User className="w-4 h-4 text-[#D4C9B8]" />
-                <span className="text-xs uppercase tracking-widest font-extrabold">
-                  Portal Resmi Karyawan Diarsiteki
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase font-bold text-[#8C7E6C] tracking-widest bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse inline-block" />
-                  Satelit GPS Aktif
-                </span>
-              </div>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#D4C9B8]/60 pb-4">
+            <div className="flex bg-[#F0EEE9] p-1 rounded-xl gap-1">
+              <button
+                onClick={() => setActiveTab('karyawan')}
+                className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-2 ${
+                  activeTab === 'karyawan' 
+                    ? 'bg-[#5A5A40] text-white shadow-xs' 
+                    : 'text-[#8C7E6C] hover:text-[#5A5A40]'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                Mode Karyawan
+              </button>
+              <button
+                onClick={() => setActiveTab('admin')}
+                className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-2 ${
+                  activeTab === 'admin' 
+                    ? 'bg-[#5A5A40] text-white shadow-xs' 
+                    : 'text-[#8C7E6C] hover:text-[#5A5A40]'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                Panel Admin
+              </button>
             </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#D4C9B8]/60 pb-4">
-              <div className="flex bg-[#F0EEE9] p-1 rounded-xl gap-1">
-                <button
-                  onClick={() => setActiveTab('karyawan')}
-                  className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-2 ${
-                    activeTab === 'karyawan' 
-                      ? 'bg-[#5A5A40] text-white shadow-xs' 
-                      : 'text-[#8C7E6C] hover:text-[#5A5A40]'
-                  }`}
-                >
-                  <User className="w-3.5 h-3.5" />
-                  Mode Karyawan
-                </button>
-                <button
-                  onClick={() => setActiveTab('admin')}
-                  className={`px-4 py-2 rounded-lg text-xs uppercase tracking-wider font-bold transition-all flex items-center gap-2 ${
-                    activeTab === 'admin' 
-                      ? 'bg-[#5A5A40] text-white shadow-xs' 
-                      : 'text-[#8C7E6C] hover:text-[#5A5A40]'
-                  }`}
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  Panel Admin
-                </button>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase font-bold text-[#8C7E6C] tracking-widest bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse inline-block" />
-                  Satelit GPS Aktif
-                </span>
-                
-                <button
-                  onClick={handleCopyEmployeeLink}
-                  className="text-[10px] text-[#5A5A40] hover:bg-[#F5F2EB] flex items-center gap-1.5 bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg transition-all font-bold uppercase tracking-wider shadow-xs cursor-pointer"
-                >
-                  {isLinkCopied ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600 animate-bounce" />
-                      <span>Link Tersalin!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span>Salin Link Karyawan</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={handleExportData}
-                  className="text-[10px] text-[#8C7E6C] hover:text-[#5A5A40] flex items-center gap-1.5 bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg transition-colors font-bold uppercase tracking-wider"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Backup Data
-                </button>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-bold text-[#8C7E6C] tracking-widest bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse inline-block" />
+                Satelit GPS Aktif
+              </span>
+              <button
+                onClick={handleExportData}
+                className="text-[10px] text-[#8C7E6C] hover:text-[#5A5A40] flex items-center gap-1.5 bg-white border border-[#D4C9B8] px-3 py-1.5 rounded-lg transition-colors font-bold uppercase tracking-wider"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Backup Data
+              </button>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Content Body based on tab */}
@@ -573,23 +421,6 @@ export default function App() {
                     Masuk ke Panel Admin
                   </button>
                 </form>
-
-                <div className="flex items-center gap-3 my-2">
-                  <div className="h-[1px] bg-[#D4C9B8] flex-1" />
-                  <span className="text-[10px] uppercase tracking-wider text-[#8C7E6C] font-semibold">atau</span>
-                  <div className="h-[1px] bg-[#D4C9B8] flex-1" />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  className="w-full py-3 bg-white border border-[#D4C9B8] text-[#5A5A40] rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#F5F2EB] shadow-xs transition-all flex items-center justify-center gap-2.5 cursor-pointer"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.275 1.565-1.88 4.604-6.887 4.604-4.33 0-7.859-3.578-7.859-8s3.53-8 7.859-8c2.46 0 4.105 1.025 5.047 1.926l3.227-3.11C18.28 1.845 15.46 1 12.24 1 5.48 1 0 6.48 0 13s5.48 12 12.24 12c7.05 0 11.75-4.97 11.75-11.96 0-.81-.087-1.425-.195-1.755H12.24z"/>
-                  </svg>
-                  Masuk dengan Google
-                </button>
 
                 <div className="p-3 bg-[#FCFAF7] border border-dashed border-[#D4C9B8] rounded-xl text-center">
                   <p className="text-[10px] text-[#8C7E6C] font-semibold uppercase tracking-wider mb-0.5">
@@ -889,23 +720,6 @@ export default function App() {
         {/* Foot Elements */}
         <footer className="pt-6 border-t border-[#D4C9B8]/80 flex flex-col sm:flex-row justify-between items-center gap-3 text-[10px] text-[#8C7E6C] font-semibold uppercase tracking-[0.2em] w-full">
           <div>DIARSITEKI ABSENSI PROYEK</div>
-          
-          {isEmployeePortal && (
-            <button
-              onClick={() => {
-                const url = new URL(window.location.href);
-                url.searchParams.delete('role');
-                url.searchParams.delete('mode');
-                url.hash = '';
-                window.history.replaceState({}, '', url.toString());
-                setIsEmployeePortal(false);
-              }}
-              className="hover:text-[#5A5A40] underline lowercase tracking-normal cursor-pointer normal-case"
-            >
-              buka mode penuh (admin/karyawan)
-            </button>
-          )}
-
           <div className="font-mono text-[9px] tracking-normal">Built with React + Vite • July 2026 Sandbox</div>
         </footer>
       </div>
