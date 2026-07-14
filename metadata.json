@@ -1,0 +1,6 @@
+{
+  "name": "DIARSITEKI ABSENSI",
+  "description": "Scandinavian minimalist attendance tracking application with live clock, GPS location tagging, and real-time photo watermarking.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
